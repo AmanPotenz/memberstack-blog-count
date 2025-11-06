@@ -95,14 +95,14 @@ module.exports = async (req, res) => {
         }
         */
 
-        // TODO: Update field names to match your Airtable schema
+        // Field mapping: Views = old views, view_count = new views
         const newRecords = await base(process.env.AIRTABLE_TABLE_NAME).create([
           {
             fields: {
               slug: slug,
               title: blogTitle,
               view_count: 1,
-              old_views: 0  // For migrated content from other systems
+              Views: 0  // Your existing "Views" field (old views for new posts)
             }
           }
         ]);

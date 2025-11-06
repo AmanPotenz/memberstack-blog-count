@@ -29,11 +29,11 @@ module.exports = async (req, res) => {
 
     console.log(`[SYNC] Found ${airtableRecords.length} records in Airtable`);
 
-    // TODO: Update field names to match your Airtable schema
+    // Field mapping: Views = old views, view_count = new views, total_views = Views + view_count
     const airtableData = airtableRecords.map(record => ({
       slug: record.get('slug'),
       title: record.get('title') || record.get('slug'), // Fallback to slug if no title
-      old_views: record.get('old_views') || 0,
+      old_views: record.get('Views') || 0,  // Your existing "Views" field
       view_count: record.get('view_count') || 0,
       total_views: record.get('total_views') || 0
     }));

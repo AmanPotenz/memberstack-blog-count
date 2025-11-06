@@ -21,16 +21,17 @@ module.exports = async (req, res) => {
       .select()
       .all();
 
-    // TODO: Update field names to match your Airtable schema
+    // Field mapping: Views = old views, view_count = new views, total_views = Views + view_count
     const counts = records.map(record => {
       const viewCount = record.get('view_count') || 0;
       const totalViews = record.get('total_views') || viewCount;
+      const oldViews = record.get('Views') || 0; // Your existing "Views" field
       return {
         slug: record.get('slug'),
         view_count: viewCount,
         total_views: totalViews,
         title: record.get('title') || '',
-        old_views: record.get('old_views') || 0
+        old_views: oldViews  // Mapped from "Views" field
       };
     });
 

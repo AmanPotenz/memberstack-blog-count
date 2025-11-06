@@ -183,13 +183,13 @@ module.exports = async (req, res) => {
           try {
             console.log(`[SYNC] Creating batch ${Math.floor(i / batchSize) + 1}: ${batch.length} records`);
 
-            // TODO: Update field names to match your Airtable schema
+            // Field mapping: Views = old views, view_count = new views
             const recordsToCreate = batch.map(blog => ({
               fields: {
                 slug: blog.slug,
                 title: blog.title,
-                view_count: 0,      // Initialize with 0 views
-                old_views: 0        // Initialize with 0 old views
+                view_count: 0,      // Initialize with 0 new views
+                Views: 0            // Your existing "Views" field (old views)
               }
             }));
 
