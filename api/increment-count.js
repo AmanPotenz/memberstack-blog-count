@@ -1,0 +1,172 @@
+const Airtable = require('airtable');
+
+// SERVER-SIDE DEDUPLICATION: Prevents race conditions when multiple requests arrive simultaneously
+const pendingRequests = new Map();
+
+module.exports = async (req, res) => {
+  // Enable CORS - allows requests from any domain (Webflow sites)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { slug } = req.body;
+
+  if (!slug) {
+    return res.status(400).json({ error: 'Slug is required' });
+  }
+
+  // ============================================
+  // SERVER-SIDE DEDUPLICATION
+  // ============================================
+  // Check if a request for this slug is already being processed
+  if (pendingRequests.has(slug)) {
+    console.log(`[DEDUP] Request already in-flight for "${slug}", waiting...`);
+    try {
+      // Wait for the existing request to complete and return its result
+      const result = await pendingRequests.get(slug);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error(`[DEDUP] Error waiting for pending request:`, error);
+      return res.status(500).json({
+        error: 'Failed to process duplicate request',
+        details: error.message
+      });
+    }
+  }
+
+  // Create a new promise for this request
+  const requestPromise = (async () => {
+    try {
+      // TODO: Configure your Airtable credentials in Vercel environment variables
+      const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY })
+        .base(process.env.AIRTABLE_BASE_ID);
+
+      // Find the record
+      // TODO: Update AIRTABLE_TABLE_NAME to match your table name
+      const records = await base(process.env.AIRTABLE_TABLE_NAME)
+        .select({
+          filterByFormula: `{slug} = '${slug}'`,
+          maxRecords: 1
+        })
+        .firstPage();
+
+      let recordId;
+      let newCount;
+      let wasCreated = false;
+
+      if (records.length === 0) {
+        // Record doesn't exist - CREATE IT AUTOMATICALLY!
+        console.log(`[AUTO-CREATE] Creating new record for slug: ${slug}`);
+
+        // Try to fetch the title from Webflow CMS (OPTIONAL)
+        let blogTitle = slug; // Default to slug if we can't get title
+
+        // TODO: If you have Webflow integration, uncomment and configure this section
+        /*
+        try {
+          const webflowResponse = await fetch(
+            `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}/items?fieldData.slug=${slug}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
+                'accept': 'application/json'
+              }
+            }
+          );
+
+          if (webflowResponse.ok) {
+            const webflowData = await webflowResponse.json();
+            if (webflowData.items && webflowData.items.length > 0) {
+              blogTitle = webflowData.items[0].fieldData?.name || slug;
+              console.log(`[AUTO-CREATE] Found blog title in Webflow: "${blogTitle}"`);
+            }
+          }
+        } catch (error) {
+          console.warn(`[AUTO-CREATE] Could not fetch title from Webflow: ${error.message}`);
+        }
+        */
+
+        // TODO: Update field names to match your Airtable schema
+        const newRecords = await base(process.env.AIRTABLE_TABLE_NAME).create([
+          {
+            fields: {
+              slug: slug,
+              title: blogTitle,
+              view_count: 1,
+              old_views: 0  // For migrated content from other systems
+            }
+          }
+        ]);
+        recordId = newRecords[0].id;
+        newCount = 1;
+        wasCreated = true;
+
+        console.log(`[AUTO-CREATE] Successfully created record with title: "${blogTitle}", view_count: 1`);
+      } else {
+        // Record exists - UPDATE IT
+        const record = records[0];
+        const currentCount = record.get('view_count') || 0;
+        newCount = currentCount + 1;
+
+        await base(process.env.AIRTABLE_TABLE_NAME).update([
+          {
+            id: record.id,
+            fields: {
+              view_count: newCount
+            }
+          }
+        ]);
+        recordId = record.id;
+
+        console.log(`[UPDATE] Incremented view count from ${currentCount} to ${newCount}`);
+      }
+
+      // Fetch the updated record to get total_views
+      const updatedRecords = await base(process.env.AIRTABLE_TABLE_NAME)
+        .select({
+          filterByFormula: `{slug} = '${slug}'`,
+          maxRecords: 1
+        })
+        .firstPage();
+
+      const updatedRecord = updatedRecords[0];
+      const totalViews = updatedRecord.get('total_views') || newCount;
+
+      return {
+        slug: slug,
+        view_count: newCount,
+        total_views: totalViews,
+        record_id: recordId,
+        auto_created: wasCreated,
+        message: 'View count incremented successfully'
+      };
+
+    } finally {
+      // Always remove from pending requests when done
+      pendingRequests.delete(slug);
+    }
+  })();
+
+  // Store the promise so duplicate requests can wait for it
+  pendingRequests.set(slug, requestPromise);
+
+  try {
+    const result = await requestPromise;
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({
+      error: 'Failed to increment view count',
+      details: error.message
+    });
+  }
+};

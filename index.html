@@ -3,10 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memberstack Blog Count</title>
+    <title>Memberstack Blog Count API</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2563eb; }
+        h2 { color: #1e40af; margin-top: 30px; }
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+        .endpoint {
+            background: #eff6ff;
+            padding: 15px;
+            border-left: 4px solid #2563eb;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .method {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+        .get { background: #10b981; color: white; }
+        .post { background: #f59e0b; color: white; }
+        .setup-step {
+            background: #f9fafb;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Welcome to Memberstack Blog Count</h1>
-    <p>Your project is ready!</p>
+    <h1>Memberstack Blog Count API</h1>
+    <p>A serverless API for tracking blog post view counts using Airtable and Vercel.</p>
+
+    <h2>API Endpoints</h2>
+
+    <div class="endpoint">
+        <h3><span class="method get">GET</span> /api/get-count</h3>
+        <p>Get the view count for a specific blog post.</p>
+        <pre><code>GET /api/get-count?slug=your-blog-slug</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "slug": "your-blog-slug",
+  "view_count": 42,
+  "total_views": 142,
+  "title": "Blog Post Title",
+  "record_id": "recXXXXXXXXX"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <h3><span class="method post">POST</span> /api/increment-count</h3>
+        <p>Increment the view count for a blog post. Auto-creates record if it doesn't exist.</p>
+        <pre><code>POST /api/increment-count
+Content-Type: application/json
+
+{
+  "slug": "your-blog-slug"
+}</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "slug": "your-blog-slug",
+  "view_count": 43,
+  "total_views": 143,
+  "record_id": "recXXXXXXXXX",
+  "auto_created": false,
+  "message": "View count incremented successfully"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <h3><span class="method get">GET</span> /api/get-all-counts</h3>
+        <p>Get view counts for all blog posts, sorted by total views.</p>
+        <pre><code>GET /api/get-all-counts</code></pre>
+        <p><strong>Response:</strong></p>
+        <pre><code>{
+  "posts": [
+    {
+      "slug": "most-popular-post",
+      "view_count": 500,
+      "total_views": 600,
+      "title": "Most Popular Post",
+      "old_views": 100
+    },
+    ...
+  ],
+  "total": 25
+}</code></pre>
+    </div>
+
+    <h2>Setup Instructions</h2>
+
+    <div class="setup-step">
+        <h3>1. Airtable Setup</h3>
+        <p>Create a table with these fields:</p>
+        <ul>
+            <li><code>slug</code> - Single line text</li>
+            <li><code>title</code> - Single line text</li>
+            <li><code>view_count</code> - Number</li>
+            <li><code>old_views</code> - Number (optional)</li>
+            <li><code>total_views</code> - Formula: <code>{view_count} + {old_views}</code></li>
+        </ul>
+    </div>
+
+    <div class="setup-step">
+        <h3>2. Environment Variables</h3>
+        <p>Configure in Vercel dashboard:</p>
+        <ul>
+            <li><code>AIRTABLE_API_KEY</code> - Your Airtable API key</li>
+            <li><code>AIRTABLE_BASE_ID</code> - Your base ID (starts with "app")</li>
+            <li><code>AIRTABLE_TABLE_NAME</code> - Your table name</li>
+            <li><code>WEBFLOW_API_TOKEN</code> - (Optional) For auto-fetching titles</li>
+            <li><code>WEBFLOW_COLLECTION_ID</code> - (Optional)</li>
+        </ul>
+    </div>
+
+    <div class="setup-step">
+        <h3>3. Webflow Integration Example</h3>
+        <pre><code>&lt;script&gt;
+// Get current blog post slug from URL or Webflow
+const slug = 'your-blog-slug';
+
+// Increment view count
+fetch('https://memberstack-blog-count.vercel.app/api/increment-count', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ slug: slug })
+})
+.then(res => res.json())
+.then(data => {
+  // Display view count
+  document.getElementById('view-count').textContent = data.view_count + ' views';
+})
+.catch(err => console.error('Error:', err));
+&lt;/script&gt;</code></pre>
+    </div>
+
+    <h2>Customization</h2>
+    <p>All API endpoints include <code>// TODO:</code> comments marking where you can customize:</p>
+    <ul>
+        <li>Airtable field names</li>
+        <li>Webflow integration</li>
+        <li>Response format</li>
+        <li>Additional features</li>
+    </ul>
+
+    <h2>Resources</h2>
+    <ul>
+        <li><a href="https://github.com/AmanPotenz/memberstack-blog-count">GitHub Repository</a></li>
+        <li><a href="https://github.com/AmanPotenz/memberstack-blog-count/blob/main/README.md">Full Documentation</a></li>
+    </ul>
 </body>
 </html>
