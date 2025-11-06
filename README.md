@@ -4,32 +4,96 @@ Blog view counter API using Airtable and Vercel, designed to work with Webflow a
 
 ## Features
 
-- Track blog post view counts in Airtable
-- Auto-create records for new blog posts
-- CORS-enabled for Webflow integration
-- Server-side deduplication to prevent double-counting
-- Optional Webflow CMS integration for auto-fetching titles
+- **View Tracking**: Track blog post view counts in Airtable with auto-record creation
+- **Webflow Integration**: Bi-directional sync between Webflow CMS and Airtable
+- **Auto-sync**: Webhook support for automatic synchronization from Webflow
+- **Deduplication**: Server-side request deduplication to prevent race conditions
+- **Auto-publish**: Automatically publish Webflow site after content changes
+- **Title Management**: Automatically fetch and update blog titles from Webflow
+- **CORS-enabled**: Works seamlessly with Webflow and other web platforms
+- **Testing Tools**: Built-in endpoints for debugging and configuration validation
+- **Batch Operations**: Efficient batch processing for syncing large datasets
 
 ## API Endpoints
 
-### 1. Get View Count
+### View Counter APIs
+
+#### 1. Get View Count
 ```
 GET /api/get-count?slug=your-blog-slug
 ```
 Returns the view count for a specific blog post.
 
-### 2. Increment View Count
+#### 2. Increment View Count
 ```
 POST /api/increment-count
 Body: { "slug": "your-blog-slug" }
 ```
 Increments the view count for a blog post. Auto-creates the record if it doesn't exist.
 
-### 3. Get All Counts
+#### 3. Get All Counts
 ```
 GET /api/get-all-counts
 ```
 Returns view counts for all blog posts, sorted by total views.
+
+### Webflow Sync APIs
+
+#### 4. Sync from Webflow to Airtable
+```
+POST /api/sync-from-webflow
+```
+Syncs blog posts from Webflow CMS to Airtable. Creates missing records automatically. Includes webhook support and server-side deduplication.
+
+#### 5. Sync from Airtable to Webflow
+```
+POST /api/sync-to-webflow
+```
+Syncs blog posts from Airtable to Webflow CMS. Creates missing blog entries and publishes the site.
+
+#### 6. Update Webflow Counts
+```
+POST /api/update-webflow-counts
+```
+Updates view counts in Webflow CMS from Airtable data. Publishes site after updates.
+
+#### 7. Fix Missing Titles
+```
+POST /api/fix-missing-titles
+```
+Fetches missing blog titles from Webflow and updates Airtable records.
+
+### Utility APIs
+
+#### 8. Get Site ID
+```
+GET /api/get-site-id
+```
+Returns the Webflow site ID from your collection. Useful for configuration.
+
+#### 9. Publish Site
+```
+POST /api/publish-site
+```
+Manually publishes your Webflow site.
+
+#### 10. Check Webflow Schema
+```
+GET /api/check-webflow-schema
+```
+Returns the schema/fields of your Webflow collection. Helps verify field names.
+
+#### 11. Test Webflow Auth
+```
+GET /api/test-webflow-auth
+```
+Tests Webflow API authentication and permissions. Useful for debugging.
+
+#### 12. Test Environment Variables
+```
+GET /api/test-env
+```
+Displays configured environment variables (sanitized). Useful for verifying setup.
 
 ## Setup
 
