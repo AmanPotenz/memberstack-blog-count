@@ -20,7 +20,9 @@
       "Bash(printf:*)",
       "Bash(findstr:*)",
       "Bash(del:*)",
-      "Bash(vercel logs:*)"
+      "Bash(vercel logs:*)",
+      "WebFetch(domain:www.memberstack.com)",
+      "Bash(node cleanup-duplicates.js:*)"
     ],
     "deny": [],
     "ask": []

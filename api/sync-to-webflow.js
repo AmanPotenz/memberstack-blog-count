@@ -61,25 +61,51 @@ module.exports = async (req, res) => {
 
     console.log(`[SYNC] Found ${webflowItems.length} items in Webflow CMS`);
 
-    // Extract slugs from Webflow (they might be in fieldData.slug or just slug)
-    const webflowSlugs = new Set(
-      webflowItems.map(item => item.fieldData?.slug || item.slug).filter(Boolean)
-    );
-
-    // ============================================
-    // Step 3: Find missing blogs in Webflow
-    // ============================================
-    const missingBlogs = airtableData.filter(record => {
-      return record.slug && !webflowSlugs.has(record.slug);
+    // Create a map of Webflow items by slug for easy lookup
+    const webflowMap = new Map();
+    webflowItems.forEach(item => {
+      const slug = item.fieldData?.slug || item.slug;
+      if (slug) {
+        // Store base slug (without random suffix) and the item
+        const baseSlug = slug.replace(/-[a-f0-9]{5}$/, ''); // Remove -xxxxx suffix if exists
+        if (!webflowMap.has(baseSlug)) {
+          webflowMap.set(baseSlug, item);
+        }
+      }
     });
 
-    console.log(`[SYNC] Found ${missingBlogs.length} blogs missing in Webflow`);
+    // ============================================
+    // Step 3: Find blogs to sync (missing or need update)
+    // ============================================
+    const toCreate = [];
+    const toUpdate = [];
 
-    if (missingBlogs.length === 0) {
+    airtableData.forEach(record => {
+      if (!record.slug) return;
+
+      const existingItem = webflowMap.get(record.slug);
+
+      if (!existingItem) {
+        // Blog doesn't exist in Webflow - create it
+        toCreate.push(record);
+      } else {
+        // Blog exists - update its view count
+        toUpdate.push({
+          ...record,
+          webflow_id: existingItem.id,
+          current_views: existingItem.fieldData['total-views'] || 0
+        });
+      }
+    });
+
+    console.log(`[SYNC] To create: ${toCreate.length}, To update: ${toUpdate.length}`);
+
+    if (toCreate.length === 0 && toUpdate.length === 0) {
       return res.status(200).json({
         success: true,
-        message: 'All blogs already exist in Webflow',
-        synced: 0,
+        message: 'All blogs are in sync',
+        created: 0,
+        updated: 0,
         total_airtable: airtableData.length,
         total_webflow: webflowItems.length
       });
@@ -89,13 +115,14 @@ module.exports = async (req, res) => {
     // Step 4: Create missing blogs in Webflow
     // ============================================
     const created = [];
+    const updated = [];
     const errors = [];
 
-    for (const blog of missingBlogs) {
+    // Create new blogs
+    for (const blog of toCreate) {
       try {
         console.log(`[SYNC] Creating blog in Webflow: ${blog.slug}`);
 
-        // TODO: Update Webflow field names to match your collection schema
         const createResponse = await fetch(
           `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}/items`,
           {
@@ -107,9 +134,9 @@ module.exports = async (req, res) => {
             },
             body: JSON.stringify({
               fieldData: {
-                name: blog.title,           // Main title field (required by Webflow)
-                slug: blog.slug,            // URL slug
-                'total-views': blog.total_views  // Only sync total views (old views managed in Airtable via CSV)
+                name: blog.title,
+                slug: blog.slug,
+                'total-views': blog.total_views
               }
             })
           }
@@ -127,20 +154,70 @@ module.exports = async (req, res) => {
           const errorData = await createResponse.json();
           errors.push({
             slug: blog.slug,
+            action: 'create',
             error: errorData
           });
           console.log(`[SYNC] ❌ Failed to create: ${blog.slug}`, errorData);
         }
 
-        // Rate limiting: Wait 200ms between requests to avoid hitting Webflow limits
         await new Promise(resolve => setTimeout(resolve, 200));
 
       } catch (error) {
         errors.push({
           slug: blog.slug,
+          action: 'create',
           error: error.message
         });
-        console.error(`[SYNC] Error creating ${blog.slug}:`, error);
+      }
+    }
+
+    // Update existing blogs
+    for (const blog of toUpdate) {
+      try {
+        console.log(`[SYNC] Updating blog in Webflow: ${blog.slug} (${blog.current_views} → ${blog.total_views})`);
+
+        const updateResponse = await fetch(
+          `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}/items/${blog.webflow_id}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
+              'accept': 'application/json',
+              'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+              fieldData: {
+                'total-views': blog.total_views
+              }
+            })
+          }
+        );
+
+        if (updateResponse.ok) {
+          updated.push({
+            slug: blog.slug,
+            updated_from: blog.current_views,
+            updated_to: blog.total_views
+          });
+          console.log(`[SYNC] ✅ Updated: ${blog.slug}`);
+        } else {
+          const errorData = await updateResponse.json();
+          errors.push({
+            slug: blog.slug,
+            action: 'update',
+            error: errorData
+          });
+          console.log(`[SYNC] ❌ Failed to update: ${blog.slug}`, errorData);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+      } catch (error) {
+        errors.push({
+          slug: blog.slug,
+          action: 'update',
+          error: error.message
+        });
       }
     }
 
@@ -149,8 +226,8 @@ module.exports = async (req, res) => {
     // ============================================
     let publishStatus = 'skipped';
 
-    // Only publish if we created new items
-    if (created.length > 0) {
+    // Publish if we created or updated items
+    if (created.length > 0 || updated.length > 0) {
       try {
         // First, get the site ID from the collection
         const collectionResponse = await fetch(
@@ -206,15 +283,18 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Sync completed: ${created.length} created, ${errors.length} errors`,
+      message: `Sync completed: ${created.length} created, ${updated.length} updated, ${errors.length} errors`,
       published: publishStatus,
       created: created,
+      updated: updated,
       errors: errors,
       stats: {
         total_airtable: airtableData.length,
         total_webflow: webflowItems.length,
-        missing_blogs: missingBlogs.length,
+        to_create: toCreate.length,
+        to_update: toUpdate.length,
         created_count: created.length,
+        updated_count: updated.length,
         error_count: errors.length
       }
     });
