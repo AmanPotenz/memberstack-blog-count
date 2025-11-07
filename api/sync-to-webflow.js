@@ -109,8 +109,7 @@ module.exports = async (req, res) => {
               fieldData: {
                 name: blog.title,           // Main title field (required by Webflow)
                 slug: blog.slug,            // URL slug
-                'total-views': blog.total_views,  // Custom field for total views
-                'old-views': blog.old_views       // Custom field for old views
+                'total-views': blog.total_views  // Only sync total views (old views managed in Airtable via CSV)
               }
             })
           }

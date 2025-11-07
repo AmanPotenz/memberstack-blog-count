@@ -95,8 +95,7 @@ module.exports = async (req, res) => {
               },
               body: JSON.stringify({
                 fieldData: {
-                  'total-views': airtableTotal,
-                  'old-views': airtableData[slug].old_views
+                  'total-views': airtableTotal
                 }
               })
             }

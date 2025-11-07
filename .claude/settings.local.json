@@ -11,7 +11,13 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(npm install:*)",
-      "WebFetch(domain:airtable.com)"
+      "WebFetch(domain:airtable.com)",
+      "Bash(vercel env:*)",
+      "Bash(vercel --prod:*)",
+      "Bash(Invoke-RestMethod -Uri \"https://memberstack-blog-count.vercel.app/api/test-env\")",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(printf:*)"
     ],
     "deny": [],
     "ask": []
