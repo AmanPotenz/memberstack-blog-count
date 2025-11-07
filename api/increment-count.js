@@ -3,6 +3,71 @@ const Airtable = require('airtable');
 // SERVER-SIDE DEDUPLICATION: Prevents race conditions when multiple requests arrive simultaneously
 const pendingRequests = new Map();
 
+// ============================================
+// AUTO-SYNC TO WEBFLOW HELPER FUNCTION
+// ============================================
+async function updateWebflowCount(slug, totalViews) {
+  try {
+    // Find the blog post in Webflow by slug
+    const searchResponse = await fetch(
+      `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}/items?fieldData.slug=${slug}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
+          'accept': 'application/json'
+        }
+      }
+    );
+
+    if (!searchResponse.ok) {
+      console.log('[AUTO-SYNC] Webflow search failed:', await searchResponse.text());
+      return;
+    }
+
+    const searchData = await searchResponse.json();
+    const items = searchData.items || [];
+
+    if (items.length === 0) {
+      console.log(`[AUTO-SYNC] Blog not found in Webflow: ${slug}`);
+      return;
+    }
+
+    const webflowItem = items[0];
+    const currentCount = webflowItem.fieldData['total-views'] || 0;
+
+    console.log(`[AUTO-SYNC] Updating Webflow: ${slug} (${currentCount} → ${totalViews})`);
+
+    // Update the item
+    const updateResponse = await fetch(
+      `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}/items/${webflowItem.id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
+          'accept': 'application/json',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          fieldData: {
+            'total-views': totalViews
+          }
+        })
+      }
+    );
+
+    if (updateResponse.ok) {
+      console.log(`[AUTO-SYNC] ✅ Successfully updated Webflow for ${slug}`);
+    } else {
+      const error = await updateResponse.json();
+      console.log(`[AUTO-SYNC] ❌ Failed to update Webflow:`, error);
+    }
+
+  } catch (error) {
+    console.error('[AUTO-SYNC] Error updating Webflow:', error);
+    throw error;
+  }
+}
+
 module.exports = async (req, res) => {
   // Enable CORS - allows requests from any domain (Webflow sites)
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -140,6 +205,17 @@ module.exports = async (req, res) => {
 
       const updatedRecord = updatedRecords[0];
       const totalViews = updatedRecord.get('total_views') || newCount;
+
+      // ============================================
+      // AUTO-SYNC TO WEBFLOW (Background)
+      // ============================================
+      // Update Webflow in the background without blocking the response
+      if (process.env.WEBFLOW_API_TOKEN && process.env.WEBFLOW_COLLECTION_ID) {
+        updateWebflowCount(slug, totalViews).catch(err => {
+          console.error('[AUTO-SYNC] Failed to update Webflow:', err.message);
+          // Don't fail the request if Webflow update fails
+        });
+      }
 
       return {
         slug: slug,
