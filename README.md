@@ -5,24 +5,30 @@ Blog view counter API using Airtable and Vercel, designed to work with Webflow a
 ## Features
 
 - **View Tracking**: Track blog post view counts in Airtable with auto-record creation
-- **Webflow Integration**: Bi-directional sync between Webflow CMS and Airtable
-- **Auto-sync**: Webhook support for automatic synchronization from Webflow
 - **Deduplication**: Server-side request deduplication to prevent race conditions
-- **Auto-publish**: Automatically publish Webflow site after content changes
-- **Title Management**: Automatically fetch and update blog titles from Webflow
+- **Session Tracking**: Client-side session tracking prevents duplicate counts per session
 - **CORS-enabled**: Works seamlessly with Webflow and other web platforms
-- **Testing Tools**: Built-in endpoints for debugging and configuration validation
-- **Batch Operations**: Efficient batch processing for syncing large datasets
+- **Testing Tools**: Built-in endpoint for debugging and configuration validation
+- **Auto-create Records**: Automatically creates Airtable records for new blog posts
 
 ## API Endpoints
-
-### View Counter APIs
 
 #### 1. Get View Count
 ```
 GET /api/get-count?slug=your-blog-slug
 ```
 Returns the view count for a specific blog post.
+
+**Response:**
+```json
+{
+  "slug": "your-blog-slug",
+  "view_count": 42,
+  "total_views": 142,
+  "title": "Blog Post Title",
+  "record_id": "recXXXXXXXXXX"
+}
+```
 
 #### 2. Increment View Count
 ```
@@ -31,65 +37,45 @@ Body: { "slug": "your-blog-slug" }
 ```
 Increments the view count for a blog post. Auto-creates the record if it doesn't exist.
 
+**Features:**
+- Server-side deduplication prevents race conditions
+- Auto-creates Airtable records for new blogs
+- Returns updated count immediately
+
+**Response:**
+```json
+{
+  "slug": "your-blog-slug",
+  "view_count": 43,
+  "total_views": 143,
+  "record_id": "recXXXXXXXXXX",
+  "auto_created": false,
+  "message": "View count incremented successfully"
+}
+```
+
 #### 3. Get All Counts
 ```
 GET /api/get-all-counts
 ```
-Returns view counts for all blog posts, sorted by total views.
+Returns view counts for all blog posts, sorted by total views (descending).
 
-### Webflow Sync APIs
+**Response:**
+```json
+{
+  "posts": [
+    {
+      "slug": "popular-post",
+      "title": "Most Popular Post",
+      "total_views": 1500
+    },
+    ...
+  ],
+  "total": 42
+}
+```
 
-#### 4. Sync from Webflow to Airtable
-```
-POST /api/sync-from-webflow
-```
-Syncs blog posts from Webflow CMS to Airtable. Creates missing records automatically. Includes webhook support and server-side deduplication.
-
-#### 5. Sync from Airtable to Webflow
-```
-POST /api/sync-to-webflow
-```
-Syncs blog posts from Airtable to Webflow CMS. Creates missing blog entries and publishes the site.
-
-#### 6. Update Webflow Counts
-```
-POST /api/update-webflow-counts
-```
-Updates view counts in Webflow CMS from Airtable data. Publishes site after updates.
-
-#### 7. Fix Missing Titles
-```
-POST /api/fix-missing-titles
-```
-Fetches missing blog titles from Webflow and updates Airtable records.
-
-### Utility APIs
-
-#### 8. Get Site ID
-```
-GET /api/get-site-id
-```
-Returns the Webflow site ID from your collection. Useful for configuration.
-
-#### 9. Publish Site
-```
-POST /api/publish-site
-```
-Manually publishes your Webflow site.
-
-#### 10. Check Webflow Schema
-```
-GET /api/check-webflow-schema
-```
-Returns the schema/fields of your Webflow collection. Helps verify field names.
-
-#### 11. Test Webflow Auth
-```
-GET /api/test-webflow-auth
-```
-Tests Webflow API authentication and permissions. Useful for debugging.
-
-#### 12. Test Environment Variables
+#### 4. Test Environment Variables
 ```
 GET /api/test-env
 ```
@@ -115,11 +101,6 @@ Configure these in Vercel:
 - `AIRTABLE_BASE_ID` - Your Airtable base ID
 - `AIRTABLE_TABLE_NAME` - Your table name (e.g., "Blog Posts")
 
-**Optional (for Webflow integration):**
-- `WEBFLOW_API_TOKEN` - Webflow API token
-- `WEBFLOW_COLLECTION_ID` - Webflow collection ID
-- `WEBFLOW_SITE_ID` - Webflow site ID
-
 ### 3. Local Development
 
 1. Clone the repository
@@ -138,7 +119,6 @@ Configure these in Vercel:
 
 All API endpoints have `TODO` comments marking where you can customize:
 - Airtable field names
-- Webflow integration
 - Response format
 - Additional features
 

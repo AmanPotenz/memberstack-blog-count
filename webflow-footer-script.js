@@ -1,283 +1,255 @@
-(function() {
-    'use strict';
+(function () {
+  "use strict";
+  const API_URL = "https://memberstack-blog-count.vercel.app";
 
-    // ============================================
-    // CONFIGURATION
-    // ============================================
-    const API_URL = 'https://memberstack-blog-count.vercel.app';
+  function getBlogSlugFromURL() {
+    const path = window.location.pathname;
+    const match = path.match(/\/blog\/([^\/\?#]+)/);
+    return match ? match[1] : null;
+  }
 
-    console.log('[ViewCounter] Script loaded');
+  function isOnBlogPost() {
+    const path = window.location.pathname;
+    return /^\/blog\/[^\/]+\/?$/.test(path);
+  }
 
-    // ============================================
-    // UTILITY FUNCTIONS
-    // ============================================
+  function isOnBlogListPage() {
+    const path = window.location.pathname;
+    return path === "/" || path === "/blog" || path === "/blog/";
+  }
 
-    /**
-     * Extract blog slug from current URL
-     * Expects URL format: /blog/post-slug
-     */
-    function getBlogSlugFromURL() {
-        const path = window.location.pathname;
-        const match = path.match(/\/blog\/([^\/]+)/);
-        return match ? match[1] : null;
+  function hasViewedInSession(slug) {
+    return sessionStorage.getItem(`blog-visited-${slug}`) === "1";
+  }
+
+  function markAsViewed(slug) {
+    sessionStorage.setItem(`blog-visited-${slug}`, "1");
+  }
+
+  async function incrementViewCount(slug) {
+    try {
+      const response = await fetch(`${API_URL}/api/increment-count`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return null;
+      }
+      return data.total_views || 0;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function getViewCount(slug) {
+    try {
+      const response = await fetch(`${API_URL}/api/get-count?slug=${slug}`);
+      const data = await response.json();
+      return data.total_views || 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  async function getAllViewCounts() {
+    try {
+      const response = await fetch(`${API_URL}/api/get-all-counts`);
+      const data = await response.json();
+      return data.posts || [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function showLoadingState(elements) {
+    elements.forEach((element) => {
+      element.textContent = "—";
+      element.style.opacity = "0.6";
+    });
+  }
+
+  function displayViewCountOnBlogPage(count) {
+    const selectors = [
+      "[data-view-count]",
+      "[data-read-count]",
+      ".view-count",
+      ".views-count",
+      "#view-count",
+    ];
+    selectors.forEach((selector) => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((element) => {
+        const useReadsFormat = element.hasAttribute("data-read-count");
+        element.textContent = useReadsFormat
+          ? `${count} reads`
+          : count.toLocaleString();
+        element.style.opacity = "1";
+      });
+    });
+  }
+
+  function displayViewCountsOnHomepage(posts) {
+    const badges = document.querySelectorAll(
+      "[data-view-count], [data-read-count]"
+    );
+
+    if (posts.length === 0) {
+      badges.forEach((badge) => {
+        badge.style.opacity = "1";
+      });
+      return;
     }
 
-    /**
-     * Check if we're on a blog post page
-     */
-    function isOnBlogPost() {
-        return window.location.pathname.includes('/blog/');
-    }
+    const postsMap = new Map(posts.map((p) => [p.slug, p.total_views || 0]));
+    let updatedCount = 0;
 
-    /**
-     * Check if this blog was already viewed in this session
-     * Prevents double-counting on same visit
-     */
-    function hasViewedInSession(slug) {
-        return sessionStorage.getItem(`blog-visited-${slug}`) === '1';
-    }
-
-    /**
-     * Mark blog as viewed in session storage
-     */
-    function markAsViewed(slug) {
-        sessionStorage.setItem(`blog-visited-${slug}`, '1');
-    }
-
-    // ============================================
-    // API FUNCTIONS
-    // ============================================
-
-    /**
-     * Increment view count for a blog post
-     * This is called ONLY on first view of session
-     */
-    async function incrementViewCount(slug) {
-        try {
-            console.log(`[ViewCounter] Incrementing view count for: ${slug}`);
-
-            const response = await fetch(`${API_URL}/api/increment-count`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ slug })
-            });
-
-            const data = await response.json();
-            console.log(`[ViewCounter] Response:`, data);
-
-            return data.total_views || 0;
-        } catch (error) {
-            console.error('[ViewCounter] Error incrementing view count:', error);
-            return 0;
+    badges.forEach((badge) => {
+      let slug = null;
+      const card =
+        badge.closest(".w-dyn-item") || badge.closest("[data-blog-slug]");
+      const link =
+        badge.closest('a[href*="/blog/"]') ||
+        (card && card.querySelector('a[href*="/blog/"]')) ||
+        badge.querySelector('a[href*="/blog/"]');
+      if (link) {
+        const href = link.getAttribute("href");
+        const match = href.match(/\/blog\/([^\/\?#]+)/);
+        if (match) {
+          slug = match[1];
         }
-    }
-
-    /**
-     * Get view count for a specific blog post
-     * Used when refreshing page or navigating back
-     */
-    async function getViewCount(slug) {
-        try {
-            const response = await fetch(`${API_URL}/api/get-count?slug=${slug}`);
-            const data = await response.json();
-            return data.total_views || 0;
-        } catch (error) {
-            console.error('[ViewCounter] Error fetching view count:', error);
-            return 0;
+      }
+      if (!slug && card && card.hasAttribute("data-blog-slug")) {
+        const attrSlug = card.getAttribute("data-blog-slug");
+        if (attrSlug && attrSlug !== "post-slug-here" && attrSlug !== "slug") {
+          slug = attrSlug;
         }
-    }
+      }
 
-    /**
-     * Get all blog post view counts
-     * Used on homepage/blog list pages
-     */
-    async function getAllViewCounts() {
-        try {
-            console.log('[ViewCounter] Fetching all view counts');
+      const count = postsMap.get(slug);
+      if (count !== undefined && slug) {
+        const useReadsFormat = badge.hasAttribute("data-read-count");
+        badge.textContent = useReadsFormat
+          ? `${count} reads`
+          : count.toLocaleString();
+        badge.style.opacity = "1";
+        updatedCount++;
+      } else {
+        badge.style.opacity = "1";
+      }
+    });
+  }
 
-            const response = await fetch(`${API_URL}/api/get-all-counts`);
-            const data = await response.json();
+  async function handleBlogPost() {
+    const slug = getBlogSlugFromURL();
+    if (!slug) return;
 
-            console.log('[ViewCounter] All counts:', data);
+    const selectors = [
+      "[data-view-count]",
+      "[data-read-count]",
+      ".view-count",
+      ".views-count",
+      "#view-count",
+    ];
+    const elements = [];
+    selectors.forEach((selector) => {
+      const found = document.querySelectorAll(selector);
+      found.forEach((el) => elements.push(el));
+    });
+    showLoadingState(elements);
 
-            return data.posts || [];
-        } catch (error) {
-            console.error('[ViewCounter] Error fetching all counts:', error);
-            return [];
-        }
-    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // ============================================
-    // DISPLAY FUNCTIONS
-    // ============================================
-
-    /**
-     * Display view count on individual blog post page
-     * Finds all elements with [data-view-count] attribute
-     */
-    function displayViewCountOnBlogPage(count) {
-        const elements = document.querySelectorAll('[data-view-count]');
-
-        elements.forEach(element => {
-            element.textContent = count.toLocaleString();
-        });
-    }
-
-    /**
-     * Display view counts on homepage or blog list page
-     * Matches blog cards by slug and updates their view count badges
-     */
-    function displayViewCountsOnHomepage(posts) {
-        // Find all badges with data-view-count or data-read-count
-        const badges = document.querySelectorAll('[data-view-count], [data-read-count]');
-
-        console.log(`[ViewCounter] Found ${badges.length} badges to update`);
-
-        badges.forEach(badge => {
-            // Find parent card with blog slug
-            const card = badge.closest('.w-dyn-item') ||
-                        badge.closest('[data-blog-slug]');
-
-            if (!card) return;
-
-            const slug = card.getAttribute('data-blog-slug');
-            if (!slug) return;
-
-            // Find matching post data
-            const post = posts.find(p => p.slug === slug);
-            if (!post) return;
-
-            const count = post.total_views ? post.total_views : 0;
-            const useReadsFormat = badge.hasAttribute('data-read-count');
-
-            // Update badge text
-            badge.textContent = useReadsFormat
-                ? `${count} reads`
-                : count.toLocaleString();
-        });
-
-        // Alternative: Update by finding links
-        const allLinks = document.querySelectorAll('a[href*="/blog/"]');
-
-        allLinks.forEach(link => {
-            const href = link.getAttribute('href');
-            if (!href) return;
-
-            const slug = href.split('/').filter(Boolean).pop();
-            if (!slug) return;
-
-            const post = posts.find(p => p.slug === slug);
-            if (!post) return;
-
-            // Find badge within the card
-            const card = link.closest('.blog-card') ||
-                        link.closest('[class*="card"]') ||
-                        link.closest('.w-dyn-item') ||
-                        link.parentElement;
-
-            if (card) {
-                const badge = card.querySelector('[data-view-count]') ||
-                             card.querySelector('[data-read-count]');
-
-                if (badge) {
-                    const useReadsFormat = badge.hasAttribute('data-read-count');
-                    badge.textContent = useReadsFormat
-                        ? `${post.total_views} reads`
-                        : post.total_views.toLocaleString();
-                }
-            }
-        });
-    }
-
-    // ============================================
-    // PAGE HANDLERS
-    // ============================================
-
-    /**
-     * Handle blog post page
-     * Increment view count on first visit, fetch on subsequent visits
-     */
-    async function handleBlogPost() {
-        const slug = getBlogSlugFromURL();
-        if (!slug) return;
-
-        console.log(`[ViewCounter] Blog post detected: ${slug}`);
-
-        if (hasViewedInSession(slug)) {
-            console.log(`[ViewCounter] Already viewed in this session, fetching count`);
-            const count = await getViewCount(slug);
-            displayViewCountOnBlogPage(count);
-        } else {
-            console.log(`[ViewCounter] First view in session, incrementing count`);
-            const newCount = await incrementViewCount(slug);
-
-            if (newCount !== null) {
-                displayViewCountOnBlogPage(newCount);
-                markAsViewed(slug);
-            }
-        }
-    }
-
-    /**
-     * Handle homepage or blog list page
-     * Fetch all view counts and display them
-     */
-    async function handleHomepage() {
-        console.log('[ViewCounter] Homepage/blog list detected');
-
-        const posts = await getAllViewCounts();
-
-        if (posts && posts.length > 0) {
-            displayViewCountsOnHomepage(posts);
-        }
-    }
-
-    // ============================================
-    // INITIALIZATION
-    // ============================================
-
-    /**
-     * Main initialization function
-     * Determines page type and calls appropriate handler
-     */
-    async function init() {
-        console.log('[ViewCounter] Initializing on:', window.location.pathname);
-
-        if (isOnBlogPost()) {
-            await handleBlogPost();
-        } else {
-            await handleHomepage();
-        }
-    }
-
-    // Run on page load
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+    if (hasViewedInSession(slug)) {
+      const count = await getViewCount(slug);
+      displayViewCountOnBlogPage(count);
     } else {
-        init();
+      const newCount = await incrementViewCount(slug);
+      if (newCount !== null) {
+        displayViewCountOnBlogPage(newCount);
+        markAsViewed(slug);
+      } else {
+        elements.forEach((el) => (el.style.opacity = "1"));
+      }
     }
+  }
 
-    // Handle browser back/forward navigation
-    window.addEventListener('popstate', function() {
-        console.log('[ViewCounter] Navigation detected (back/forward)');
-        setTimeout(init, 100);
+  let isLoadingHomepage = false;
+  let hasLoadedHomepage = false;
+
+  async function handleHomepage(force = false) {
+    if (isLoadingHomepage) return;
+
+    if (hasLoadedHomepage && !force) return;
+
+    isLoadingHomepage = true;
+
+    try {
+      const badges = document.querySelectorAll(
+        "[data-view-count], [data-read-count]"
+      );
+      showLoadingState(badges);
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const posts = await getAllViewCounts();
+      displayViewCountsOnHomepage(posts);
+      hasLoadedHomepage = true;
+    } catch (error) {
+      const badges = document.querySelectorAll(
+        "[data-view-count], [data-read-count]"
+      );
+      badges.forEach((badge) => {
+        badge.style.opacity = "1";
+      });
+    } finally {
+      isLoadingHomepage = false;
+    }
+  }
+
+  async function init(forceRefresh = false) {
+    if (isOnBlogPost()) {
+      await handleBlogPost();
+    } else if (isOnBlogListPage()) {
+      await handleHomepage(forceRefresh);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+
+  window.addEventListener("popstate", function () {
+    hasLoadedHomepage = false;
+    setTimeout(() => init(true), 100);
+  });
+
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) {
+      hasLoadedHomepage = false;
+      setTimeout(() => init(true), 100);
+    }
+  });
+
+  let mutationTimeout;
+  document.addEventListener("DOMContentLoaded", function () {
+    const observer = new MutationObserver(function (mutations) {
+      if (isOnBlogListPage()) {
+        clearTimeout(mutationTimeout);
+        mutationTimeout = setTimeout(() => {
+          handleHomepage();
+        }, 500);
+      }
     });
 
-    // Handle page restoration from cache
-    window.addEventListener('pageshow', function(event) {
-        if (event.persisted) {
-            console.log('[ViewCounter] Page restored from cache');
-            init();
-        }
-    });
-
-    // Refresh homepage counts when tab becomes visible
-    document.addEventListener('visibilitychange', function() {
-        if (!document.hidden && !isOnBlogPost()) {
-            setTimeout(handleHomepage, 100);
-        }
-    });
-
+    if (isOnBlogListPage()) {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
+  });
 })();
