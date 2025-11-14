@@ -95,6 +95,9 @@
       "[data-view-count], [data-read-count]"
     );
 
+    console.log(`[ViewCounter] Found ${badges.length} badges to update`);
+    console.log(`[ViewCounter] Received ${posts.length} posts from API`);
+
     if (posts.length === 0) {
       badges.forEach((badge) => {
         badge.style.opacity = "1";
@@ -104,6 +107,7 @@
 
     const postsMap = new Map(posts.map((p) => [p.slug, p.total_views || 0]));
     let updatedCount = 0;
+    let notFoundCount = 0;
 
     badges.forEach((badge) => {
       let slug = null;
@@ -136,9 +140,15 @@
         badge.style.opacity = "1";
         updatedCount++;
       } else {
+        if (slug) {
+          console.log(`[ViewCounter] No count found for slug: "${slug}"`);
+          notFoundCount++;
+        }
         badge.style.opacity = "1";
       }
     });
+
+    console.log(`[ViewCounter] Updated ${updatedCount} badges, ${notFoundCount} not found`);
   }
 
   async function handleBlogPost() {
@@ -235,12 +245,30 @@
   });
 
   let mutationTimeout;
+  let retryCount = 0;
+  const MAX_RETRIES = 5;
+
+  // Retry logic for dynamic content
+  async function initWithRetry() {
+    const badges = document.querySelectorAll("[data-view-count], [data-read-count]");
+
+    if (badges.length === 0 && retryCount < MAX_RETRIES) {
+      retryCount++;
+      setTimeout(initWithRetry, 300);
+      return;
+    }
+
+    if (isOnBlogListPage()) {
+      await handleHomepage();
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     const observer = new MutationObserver(function (mutations) {
       if (isOnBlogListPage()) {
         clearTimeout(mutationTimeout);
         mutationTimeout = setTimeout(() => {
-          handleHomepage();
+          handleHomepage(true);
         }, 500);
       }
     });
@@ -250,6 +278,9 @@
         childList: true,
         subtree: true,
       });
+
+      // Initial load with retry
+      initWithRetry();
     }
   });
 })();
