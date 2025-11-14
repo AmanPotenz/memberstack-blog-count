@@ -221,15 +221,20 @@
   async function init(forceRefresh = false) {
     if (isOnBlogPost()) {
       await handleBlogPost();
-    } else if (isOnBlogListPage()) {
-      await handleHomepage(forceRefresh);
+    } else if (isOnBlogListPage() && forceRefresh) {
+      // Only handle homepage on force refresh (navigation events)
+      // Initial load is handled by initWithRetry()
+      await handleHomepage(true);
     }
   }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
-    init();
+    // Only init blog posts immediately, let initWithRetry handle homepage
+    if (isOnBlogPost()) {
+      init();
+    }
   }
 
   window.addEventListener("popstate", function () {
@@ -247,6 +252,7 @@
   let mutationTimeout;
   let retryCount = 0;
   const MAX_RETRIES = 5;
+  let observerActive = false;
 
   // Retry logic for dynamic content
   async function initWithRetry() {
@@ -258,22 +264,40 @@
       return;
     }
 
-    if (isOnBlogListPage()) {
+    if (isOnBlogListPage() && badges.length > 0) {
       await handleHomepage();
+      // Disconnect observer after successful load to prevent loop
+      if (window.blogObserver) {
+        window.blogObserver.disconnect();
+        observerActive = false;
+      }
     }
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    const observer = new MutationObserver(function (mutations) {
-      if (isOnBlogListPage()) {
-        clearTimeout(mutationTimeout);
-        mutationTimeout = setTimeout(() => {
-          handleHomepage(true);
-        }, 500);
-      }
-    });
+    if (isOnBlogListPage() && !observerActive) {
+      observerActive = true;
 
-    if (isOnBlogListPage()) {
+      const observer = new MutationObserver(function (mutations) {
+        // Only trigger if new .w-dyn-item elements are added (pagination, filters, etc.)
+        const hasNewCards = mutations.some(mutation =>
+          Array.from(mutation.addedNodes).some(node =>
+            node.nodeType === 1 && (
+              node.classList?.contains('w-dyn-item') ||
+              node.querySelector?.('.w-dyn-item')
+            )
+          )
+        );
+
+        if (hasNewCards && observerActive) {
+          clearTimeout(mutationTimeout);
+          mutationTimeout = setTimeout(() => {
+            handleHomepage(true);
+          }, 500);
+        }
+      });
+
+      window.blogObserver = observer;
       observer.observe(document.body, {
         childList: true,
         subtree: true,
